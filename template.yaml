@@ -1,0 +1,121 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  NFC Wedding PoC - Lambda + API Gateway + DynamoDB + S3 + CloudFront
+
+Globals:
+  Function:
+    Timeout: 10
+    Runtime: python3.11
+    MemorySize: 128
+
+Resources:
+
+  # DynamoDB Table
+  WeddingGuestsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: WeddingGuests
+      AttributeDefinitions:
+        - AttributeName: GuestID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: GuestID
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  # Lambda Function
+  NFCWeddingLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: NFCWeddingHandler
+      Handler: app.lambda_handler
+      CodeUri: ./src/
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WeddingGuestsTable
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref WeddingGuestsTable
+          CLOUDFRONT_URL: !GetAtt WeddingContentDistribution.DomainName
+
+  # API Gateway
+  NFCWeddingAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: NFCWeddingAPI
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      EndpointConfiguration: REGIONAL
+      DefinitionBody:
+        swagger: "2.0"
+        info:
+          title: NFCWeddingAPI
+          version: 1.0
+        paths:
+          /guest:
+            get:
+              x-amazon-apigateway-integration:
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${NFCWeddingLambda.Arn}/invocations
+                httpMethod: POST
+                type: aws_proxy
+              parameters:
+                - name: guest_id
+                  in: query
+                  required: true
+                  type: string
+
+  # S3 Bucket for Wedding Content
+  WeddingContentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "nfc-wedding-content-${AWS::AccountId}"
+      AccessControl: Private
+      WebsiteConfiguration:
+        IndexDocument: index.html
+
+  # CloudFront Distribution
+  WeddingContentDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt WeddingContentBucket.DomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+        DefaultRootObject: index.html
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+Outputs:
+
+  NFCWeddingLambdaFunction:
+    Description: "Lambda Function ARN"
+    Value: !GetAtt NFCWeddingLambda.Arn
+
+  NFCWeddingAPIEndpoint:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${NFCWeddingAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/guest"
+
+  WeddingContentS3Bucket:
+    Description: "S3 bucket hosting wedding content"
+    Value: !Ref WeddingContentBucket
+
+  WeddingContentCloudFrontURL:
+    Description: "CloudFront URL for wedding content"
+    Value: !GetAtt WeddingContentDistribution.DomainName
