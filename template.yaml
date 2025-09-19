@@ -86,9 +86,8 @@ Resources:
         Enabled: true
         Origins:
           - Id: S3Origin
-            DomainName: !GetAtt WeddingContentBucket.DomainName
-            S3OriginConfig:
-              OriginAccessIdentity: ""
+            DomainName: !GetAtt WeddingContentBucket.RegionalDomainName
+            S3OriginConfig: {}
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
           ViewerProtocolPolicy: redirect-to-https
@@ -98,6 +97,8 @@ Resources:
           CachedMethods:
             - GET
             - HEAD
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6   # AWS Managed CachingOptimized
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # AWS Managed CORS-S3Origin
         DefaultRootObject: index.html
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
