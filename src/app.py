@@ -16,8 +16,8 @@ def lambda_handler(event, context):
         return {'statusCode': 404, 'body': 'Guest not found'}
 
     # Redirect to personalized content hosted on CloudFront/S3
-    # Example assumes 'thank_you_video.mp4' is in CloudFront bucket
-    redirect_url = f"{CLOUDFRONT_URL}/{guest['ContentLinks']['thank_you_video']}"
+    # Example assumes 'thank_you.mp4' is in CloudFront bucket
+    redirect_url = f"{CLOUDFRONT_URL}/{guest['ContentLinks']['thank_you']}"
 
     # Log tap count
     table.update_item(
